@@ -6,6 +6,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.formdev.flatlaf.intellijthemes.FlatDraculaIJTheme;
 
 import javax.swing.Timer;
 import javax.swing.*;
@@ -101,7 +102,7 @@ public class XMageLauncher implements Runnable {
 
         Random r = new Random();
         int imageNum = 1 + r.nextInt(17);
-        ImageIcon background = new ImageIcon(new ImageIcon(Objects.requireNonNull(XMageLauncher.class.getResource("/backgrounds/" + imageNum + ".jpg"))).getImage().getScaledInstance(width, height, Image.SCALE_SMOOTH));
+        ImageIcon background = new ImageIcon(new ImageIcon(Objects.requireNonNull(XMageLauncher.class.getResource("/backgrounds/arcane.jpg"))).getImage().getScaledInstance(width, height, Image.SCALE_SMOOTH));
         mainPanel = new JLabel(background) {
             @Override
             public Dimension getPreferredSize() {
@@ -159,8 +160,9 @@ public class XMageLauncher implements Runnable {
 
         textArea = new JTextArea(5, 40);
         textArea.setEditable(false);
-        textArea.setForeground(Color.WHITE);
-        textArea.setBackground(Color.BLACK);
+        textArea.setForeground(new Color(248, 248, 242));
+        textArea.setBackground(new Color(22, 17, 34));
+        textArea.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
         DefaultCaret caret = (DefaultCaret) textArea.getCaret();
         caret.setUpdatePolicy(DefaultCaret.ALWAYS_UPDATE);
         scrollPane = new JScrollPane(textArea);
@@ -203,7 +205,7 @@ public class XMageLauncher implements Runnable {
         btnLaunchClient = new JButton(messages.getString("launchClient"));
         btnLaunchClient.setToolTipText(messages.getString("launchClient.tooltip"));
         btnLaunchClient.setFont(fontBig);
-        btnLaunchClient.setForeground(Color.GRAY);
+        btnLaunchClient.putClientProperty("JButton.buttonType", "default");
         btnLaunchClient.setEnabled(false);
         btnLaunchClient.addActionListener(e -> handleClient());
 
@@ -217,7 +219,6 @@ public class XMageLauncher implements Runnable {
         btnLaunchClientServer.setToolTipText(messages.getString("launchClientServer.tooltip"));
         btnLaunchClientServer.setFont(fontSmallBold);
         btnLaunchClientServer.setEnabled(false);
-        btnLaunchClientServer.setForeground(Color.GRAY);
         btnLaunchClientServer.addActionListener(e -> {
             textArea.append("\n");
             handleServer();
@@ -234,14 +235,12 @@ public class XMageLauncher implements Runnable {
         btnLaunchServer.setToolTipText(messages.getString("launchServer.tooltip"));
         btnLaunchServer.setFont(fontSmallBold);
         btnLaunchServer.setEnabled(false);
-        btnLaunchServer.setForeground(Color.GRAY);
         btnLaunchServer.addActionListener(e -> handleServer());
         pnlButtons.add(btnLaunchServer, constraints);
 
         btnCheck = new JButton(messages.getString("check.xmage"));
         btnCheck.setToolTipText(messages.getString("check.xmage.tooltip"));
         btnCheck.setFont(fontSmallBold);
-        btnCheck.setForeground(Color.BLACK);
         btnCheck.setEnabled(true);
         btnCheck.addActionListener(e -> handleCheckUpdates());
         pnlButtons.add(btnCheck, constraints);
@@ -249,7 +248,6 @@ public class XMageLauncher implements Runnable {
         btnUpdate = new JButton(messages.getString("update.xmage"));
         btnUpdate.setToolTipText(messages.getString("update.xmage.tooltip"));
         btnUpdate.setFont(fontSmallBold);
-        btnUpdate.setForeground(Color.BLACK);
         btnUpdate.setEnabled(true);
         btnUpdate.addActionListener(e -> handleUpdate());
         pnlButtons.add(btnUpdate, constraints);
@@ -489,11 +487,17 @@ public class XMageLauncher implements Runnable {
 
     public static void main(String[] args) {
         try {
-            UIManager.setLookAndFeel(UIManager.getCrossPlatformLookAndFeelClassName());
+            // Arcane look — FlatLaf Dracula + accent, matching the XMage client
+            UIManager.put("Button.arc", 12);
+            UIManager.put("Component.arc", 10);
+            UIManager.put("ProgressBar.arc", 10);
+            UIManager.put("Component.focusWidth", 1);
+            UIManager.put("ScrollBar.thumbArc", 999);
+            UIManager.put("Component.accentColor", new Color(189, 147, 249));
+            UIManager.setLookAndFeel(new FlatDraculaIJTheme());
             XMageLauncher gui = new XMageLauncher();
             SwingUtilities.invokeLater(gui);
-        } catch (ClassNotFoundException | InstantiationException | IllegalAccessException |
-                 UnsupportedLookAndFeelException ex) {
+        } catch (UnsupportedLookAndFeelException ex) {
             logger.error("Error: ", ex);
         }
     }
@@ -695,16 +699,11 @@ public class XMageLauncher implements Runnable {
     private void enableButtons() {
         if (!noJava && !noXMage) {
             btnLaunchClient.setEnabled(true);
-            btnLaunchClient.setForeground(Color.BLACK);
             btnLaunchClientServer.setEnabled(true);
-            btnLaunchClientServer.setForeground(Color.BLACK);
             btnLaunchServer.setEnabled(true);
-            btnLaunchServer.setForeground(Color.BLACK);
         }
         btnUpdate.setEnabled(true);
-        btnUpdate.setForeground(Color.BLACK);
         btnCheck.setEnabled(true);
-        btnCheck.setForeground(Color.BLACK);
     }
 
     private void disableButtons() {
@@ -713,16 +712,11 @@ public class XMageLauncher implements Runnable {
 
     private void disableButtons(boolean justClientServer) {
         btnLaunchClient.setEnabled(false);
-        btnLaunchClient.setForeground(Color.GRAY);
         btnLaunchClientServer.setEnabled(false);
-        btnLaunchClientServer.setForeground(Color.GRAY);
         btnLaunchServer.setEnabled(false);
-        btnLaunchServer.setForeground(Color.GRAY);
         if (!justClientServer) {
             btnUpdate.setEnabled(false);
-            btnUpdate.setForeground(Color.GRAY);
             btnCheck.setEnabled(false);
-            btnCheck.setForeground(Color.GRAY);
         }
     }
 
