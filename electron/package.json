@@ -10,6 +10,10 @@
   },
   "author": "Darrell Best",
   "license": "MIT",
+  "dependencies": {
+    "extract-zip": "^2.0.1",
+    "tar": "^6.2.1"
+  },
   "devDependencies": {
     "electron": "^32.0.0",
     "electron-builder": "^24.13.3"
