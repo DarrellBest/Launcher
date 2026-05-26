@@ -5,16 +5,24 @@ const fs = require('fs');
 const os = require('os');
 const http = require('http');
 const https = require('https');
-const { spawn, execFile } = require('child_process');
+const { spawn } = require('child_process');
+const tar = require('tar');
+const extractZip = require('extract-zip');
 
 // ---- configuration ----
 const CONFIG_URL = process.env.XMAGE_CONFIG || 'http://play.darrellbest.com:17080/config.json';
 const INSTALL_ROOT = process.env.XMAGE_HOME || path.join(os.homedir(), 'Documents', 'xmage');
-const JAVA = path.join(INSTALL_ROOT, 'java', 'jre1.8.0_201', 'bin', 'java');
 const XMAGE_DIR = path.join(INSTALL_ROOT, 'xmage');
-const CLIENT_DIR = path.join(XMAGE_DIR, 'mage-client');
-const SERVER_DIR = path.join(XMAGE_DIR, 'mage-server');
+const JAVA_DIR = path.join(INSTALL_ROOT, 'java');
 const PROPS = path.join(INSTALL_ROOT, 'installed.properties');
+const PLAT = process.platform; // 'win32' | 'darwin' | 'linux'
+const JAVA_SUFFIX = PLAT === 'win32' ? 'windows-x64' : PLAT === 'darwin' ? 'macosx-x64' : 'linux-x64';
+// Performance/graphics flags (per the project readme's "Performance tweaks").
+// OpenGL accelerates rendering on capable GPUs; on Linux it has a known file-
+// chooser bug (deck loading), so use XRender there instead.
+const GRAPHICS_OPTS = PLAT === 'linux' ? ['-Dsun.java2d.xrender=true'] : ['-Dsun.java2d.opengl=true'];
+const CLIENT_OPTS = ['-Xmx4096m', ...GRAPHICS_OPTS, '-Dfile.encoding=UTF-8', '-Dsun.jnu.encoding=UTF-8', '-Djava.net.preferIPv4Stack=true'];
+const SERVER_OPTS = ['-Xmx1024m'];
 
 let win;
 const procs = {};
@@ -29,34 +37,26 @@ function createWindow() {
   win.once('ready-to-show', () => win.show());
 }
 
-// ---- helpers ----
+// ---- net helpers ----
 function httpGet(url) {
   return new Promise((resolve, reject) => {
-    const lib = url.startsWith('https') ? https : http;
-    lib.get(url, (res) => {
-      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        return resolve(httpGet(res.headers.location));
-      }
-      if (res.statusCode !== 200) { reject(new Error('HTTP ' + res.statusCode)); res.resume(); return; }
-      let data = '';
-      res.on('data', (c) => data += c);
-      res.on('end', () => resolve(data));
+    (url.startsWith('https') ? https : http).get(url, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) { res.resume(); return resolve(httpGet(res.headers.location)); }
+      if (res.statusCode !== 200) { res.resume(); return reject(new Error('HTTP ' + res.statusCode)); }
+      let data = ''; res.on('data', (c) => data += c); res.on('end', () => resolve(data));
     }).on('error', reject);
   });
 }
-
 function download(url, dest, onProgress) {
   return new Promise((resolve, reject) => {
-    const lib = url.startsWith('https') ? https : http;
     const file = fs.createWriteStream(dest);
-    lib.get(url, (res) => {
+    (url.startsWith('https') ? https : http).get(url, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        file.close(); fs.unlinkSync(dest);
+        file.close(); try { fs.unlinkSync(dest); } catch (_) {}
         return resolve(download(res.headers.location, dest, onProgress));
       }
-      if (res.statusCode !== 200) { reject(new Error('HTTP ' + res.statusCode)); return; }
-      const total = parseInt(res.headers['content-length'] || '0', 10);
-      let got = 0;
+      if (res.statusCode !== 200) { return reject(new Error('HTTP ' + res.statusCode)); }
+      const total = parseInt(res.headers['content-length'] || '0', 10); let got = 0;
       res.on('data', (c) => { got += c.length; if (total) onProgress(got / total); });
       res.pipe(file);
       file.on('finish', () => file.close(() => resolve()));
@@ -64,85 +64,99 @@ function download(url, dest, onProgress) {
   });
 }
 
-function readInstalledVersion() {
+// ---- props ----
+function readProp(key) {
+  try { const m = fs.readFileSync(PROPS, 'utf8').match(new RegExp('^' + key.replace(/\./g, '\\.') + '=(.*)$', 'm')); return m ? m[1].trim() : ''; } catch (_) { return ''; }
+}
+function writeProp(key, val) {
+  let txt = ''; try { txt = fs.readFileSync(PROPS, 'utf8'); } catch (_) {}
+  const re = new RegExp('^' + key.replace(/\./g, '\\.') + '=.*$', 'm');
+  if (re.test(txt)) txt = txt.replace(re, key + '=' + val); else txt += (txt.endsWith('\n') || !txt ? '' : '\n') + key + '=' + val + '\n';
+  fs.mkdirSync(INSTALL_ROOT, { recursive: true }); fs.writeFileSync(PROPS, txt);
+}
+
+// ---- java/client discovery ----
+function findJavaHome() {
   try {
-    const txt = fs.readFileSync(PROPS, 'utf8');
-    const m = txt.match(/^xmage\.version=(.*)$/m);
-    return m ? m[1].trim() : '(none)';
-  } catch (_) { return '(not installed)'; }
+    for (const d of fs.readdirSync(JAVA_DIR)) {
+      if (!d.startsWith('jre')) continue;
+      const home = PLAT === 'darwin' ? path.join(JAVA_DIR, d, 'Contents', 'Home') : path.join(JAVA_DIR, d);
+      if (fs.existsSync(path.join(home, 'bin', PLAT === 'win32' ? 'java.exe' : 'java'))) return home;
+    }
+  } catch (_) {}
+  return null;
+}
+function clientInstalled() {
+  try { return fs.readdirSync(path.join(XMAGE_DIR, 'mage-client', 'lib')).some((f) => /^mage-client.*\.jar$/.test(f)); } catch (_) { return false; }
+}
+function send(ch, p) { if (win && !win.isDestroyed()) win.webContents.send(ch, p); }
+function log(kind, text) { send('console:line', { kind, text }); }
+
+// ---- install ----
+async function ensureJava(cfg) {
+  if (findJavaHome()) { log('sys', 'Java already installed.'); return; }
+  const ver = cfg.java.version;
+  const url = cfg.java.location + JAVA_SUFFIX + '.tar.gz';
+  const tmp = path.join(os.tmpdir(), 'xmage-java.tar.gz');
+  log('sys', 'Downloading Java (' + ver + ') from ' + url);
+  send('phase', 'Downloading Java…');
+  await download(url, tmp, (p) => send('progress', p));
+  log('sys', 'Installing Java…'); send('phase', 'Installing Java…'); send('progress', 1);
+  fs.mkdirSync(JAVA_DIR, { recursive: true });
+  await tar.x({ file: tmp, cwd: JAVA_DIR });
+  writeProp('java.version', ver);
+  log('ok2', 'Java installed.');
+}
+async function ensureXMage(cfg) {
+  const avail = cfg.XMage.version, inst = readProp('xmage.version');
+  if (clientInstalled() && avail === inst) { log('sys', 'XMage already up to date.'); return; }
+  const tmp = path.join(os.tmpdir(), 'xmage-update.zip');
+  log('sys', 'Downloading XMage from ' + cfg.XMage.location);
+  send('phase', 'Downloading XMage…');
+  await download(cfg.XMage.location, tmp, (p) => send('progress', p));
+  log('sys', 'Installing XMage…'); send('phase', 'Installing XMage…'); send('progress', 1);
+  fs.mkdirSync(XMAGE_DIR, { recursive: true });
+  await extractZip(tmp, { dir: XMAGE_DIR });
+  writeProp('xmage.version', avail);
+  log('ok2', 'XMage installed: ' + avail);
+}
+async function install(cfg) {
+  await ensureJava(cfg);
+  await ensureXMage(cfg);
+  send('phase', 'Ready'); send('progress', 1);
 }
 
-function setInstalledVersion(v) {
-  let txt = '';
-  try { txt = fs.readFileSync(PROPS, 'utf8'); } catch (_) {}
-  if (/^xmage\.version=/m.test(txt)) txt = txt.replace(/^xmage\.version=.*$/m, 'xmage.version=' + v);
-  else txt += '\nxmage.version=' + v + '\n';
-  try { fs.writeFileSync(PROPS, txt); } catch (_) {}
-}
-
-function send(channel, payload) { if (win && !win.isDestroyed()) win.webContents.send(channel, payload); }
-
-function findJar(dir) {
-  try {
-    const lib = path.join(dir, 'lib');
-    const f = fs.readdirSync(lib).find((n) => /^mage-(client|server).*\.jar$/.test(n));
-    return f ? path.join('lib', f) : null;
-  } catch (_) { return null; }
-}
-
+// ---- launch ----
 function launch(kind) {
-  const dir = kind === 'client' ? CLIENT_DIR : SERVER_DIR;
-  const jar = findJar(dir);
-  if (!jar) { send('console:line', { kind: 'err', text: `${kind}: jar not found in ${dir}` }); return false; }
-  const xmx = kind === 'client' ? '-Xmx2000m' : '-Xmx1024m';
-  const args = [xmx, '-Dfile.encoding=UTF-8', '-Djava.net.preferIPv4Stack=true', '-jar', jar];
-  send('console:line', { kind: 'sys', text: `Launching ${kind}: ${path.basename(JAVA)} ${args.join(' ')}` });
-  const p = spawn(JAVA, args, { cwd: dir });
+  const home = findJavaHome();
+  const dir = path.join(XMAGE_DIR, kind === 'client' ? 'mage-client' : 'mage-server');
+  if (!home || !fs.existsSync(dir)) { log('err', kind + ': not installed yet — run Install first.'); return false; }
+  const bin = path.join(home, 'bin', PLAT === 'win32' ? 'java.exe' : 'java');
+  const opts = kind === 'client' ? CLIENT_OPTS : SERVER_OPTS;
+  const main = kind === 'client' ? 'mage.client.MageFrame' : 'mage.server.Main';
+  const args = [...opts, '-cp', path.join(dir, 'lib', '*'), main];
+  log('sys', 'Launching ' + kind + '…');
+  const p = spawn(bin, args, { cwd: dir, env: { ...process.env, JAVA_HOME: home } });
   procs[kind] = p;
-  const onData = (b) => String(b).split(/\r?\n/).forEach((l) => l && send('console:line', { kind, text: l }));
-  p.stdout.on('data', onData);
-  p.stderr.on('data', onData);
-  p.on('exit', (code) => { send('console:line', { kind: 'sys', text: `${kind} exited (${code})` }); send('proc:state', { kind, running: false }); delete procs[kind]; });
+  const onData = (b) => String(b).split(/\r?\n/).forEach((l) => l && log(kind, l));
+  p.stdout.on('data', onData); p.stderr.on('data', onData);
+  p.on('exit', (code) => { log('sys', kind + ' exited (' + code + ')'); send('proc:state', { kind, running: false }); delete procs[kind]; });
   send('proc:state', { kind, running: true });
   return true;
 }
 
 // ---- IPC ----
 ipcMain.handle('app:info', () => ({
-  installRoot: INSTALL_ROOT, configUrl: CONFIG_URL,
-  javaExists: fs.existsSync(JAVA), clientExists: !!findJar(CLIENT_DIR), serverExists: !!findJar(SERVER_DIR),
-  installedVersion: readInstalledVersion()
+  installRoot: INSTALL_ROOT, configUrl: CONFIG_URL, platform: PLAT,
+  javaInstalled: !!findJavaHome(), clientInstalled: clientInstalled(), installedVersion: readProp('xmage.version') || '(none)'
 }));
-
-ipcMain.handle('config:get', async () => {
-  const txt = await httpGet(CONFIG_URL);
-  return JSON.parse(txt);
-});
-
+ipcMain.handle('config:get', async () => JSON.parse(await httpGet(CONFIG_URL)));
+ipcMain.handle('install:run', async (_e, cfg) => { await install(cfg); return { installedVersion: readProp('xmage.version'), clientInstalled: clientInstalled() }; });
 ipcMain.handle('client:launch', () => launch('client'));
 ipcMain.handle('server:launch', () => launch('server'));
-ipcMain.handle('server:running', () => !!procs.server);
-
-ipcMain.handle('update:install', async (_e, cfg) => {
-  const url = cfg && cfg.XMage && cfg.XMage.location;
-  if (!url) throw new Error('no XMage.location in config');
-  const tmp = path.join(os.tmpdir(), 'xmage-update.zip');
-  send('console:line', { kind: 'sys', text: 'Downloading ' + url });
-  await download(url, tmp, (pct) => send('update:progress', pct));
-  send('console:line', { kind: 'sys', text: 'Installing update...' });
-  await new Promise((res, rej) => {
-    fs.mkdirSync(XMAGE_DIR, { recursive: true });
-    execFile('unzip', ['-o', '-q', tmp, '-d', XMAGE_DIR], (err) => err ? rej(err) : res());
-  });
-  if (cfg.XMage.version) setInstalledVersion(cfg.XMage.version);
-  send('update:progress', 1);
-  send('console:line', { kind: 'sys', text: 'Update installed: ' + cfg.XMage.version });
-  return readInstalledVersion();
-});
-
+ipcMain.handle('open:url', (_e, u) => shell.openExternal(u));
 ipcMain.handle('win:close', () => win.close());
 ipcMain.handle('win:min', () => win.minimize());
-ipcMain.handle('open:url', (_e, u) => shell.openExternal(u));
 
 app.whenReady().then(createWindow);
 app.on('window-all-closed', () => { Object.values(procs).forEach((p) => { try { p.kill(); } catch (_) {} }); if (process.platform !== 'darwin') app.quit(); });
