@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>XMAGE — Launcher</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@500;600;700&family=Spectral:ital,wght@0,300;0,400;0,500;1,400&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --void:#070512; --void2:#0e0a1c; --panel:#150f28; --panel2:#1b1432;
+    --line:rgba(173,136,255,.18); --line2:rgba(173,136,255,.35);
+    --arcane:#a875ff; --arcane-bright:#c9a7ff; --arcane-deep:#6d3bd1;
+    --teal:#46e6d6; --gold:#f3c97a; --ember:#ff7d4d;
+    --text:#ece6fb; --muted:#9b8fc0; --muted2:#6f6593;
+    --glow:0 0 24px rgba(168,117,255,.55);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:"Spectral",Georgia,serif; color:var(--text);
+    background:var(--void); overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+  /* ---------- atmospheric background ---------- */
+  #fx{position:fixed;inset:0;z-index:0}
+  .mesh{position:fixed;inset:-20% ;z-index:0;pointer-events:none;
+    background:
+      radial-gradient(60% 50% at 22% 32%, rgba(109,59,209,.55), transparent 60%),
+      radial-gradient(45% 45% at 82% 18%, rgba(70,230,214,.16), transparent 55%),
+      radial-gradient(55% 60% at 78% 88%, rgba(255,125,77,.14), transparent 55%),
+      radial-gradient(90% 90% at 50% 50%, rgba(20,12,40,.2), rgba(7,5,18,.95) 75%);
+    filter:saturate(115%);
+    animation:drift 22s ease-in-out infinite alternate;
+  }
+  @keyframes drift{from{transform:translate3d(-1.5%, -1%,0) scale(1.02)}to{transform:translate3d(1.5%,1.5%,0) scale(1.06)}}
+  .grain{position:fixed;inset:0;z-index:2;pointer-events:none;opacity:.05;mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");}
+  .vignette{position:fixed;inset:0;z-index:2;pointer-events:none;
+    box-shadow:inset 0 0 240px 60px rgba(0,0,0,.75);}
+
+  /* ---------- shell ---------- */
+  .app{position:relative;z-index:3;height:100vh;display:flex;flex-direction:column;
+    border:1px solid var(--line);}
+  /* title bar */
+  .titlebar{height:44px;display:flex;align-items:center;gap:14px;padding:0 16px;
+    background:linear-gradient(180deg,rgba(27,20,50,.9),rgba(14,10,28,.6));
+    border-bottom:1px solid var(--line);backdrop-filter:blur(8px);}
+  .brand-mini{display:flex;align-items:center;gap:9px;font-family:"Cinzel",serif;
+    font-weight:700;letter-spacing:.22em;font-size:13px;color:var(--arcane-bright);}
+  .brand-mini .rune{width:16px;height:16px;color:var(--arcane);filter:drop-shadow(0 0 6px var(--arcane))}
+  .tnav{display:flex;gap:4px;margin-left:18px}
+  .tnav a{font-family:"Cinzel",serif;font-size:11px;letter-spacing:.14em;color:var(--muted);
+    text-transform:uppercase;padding:7px 12px;border-radius:7px;text-decoration:none;transition:.2s}
+  .tnav a:hover,.tnav a.on{color:var(--text);background:rgba(168,117,255,.12)}
+  .wctrl{margin-left:auto;display:flex;gap:10px}
+  .wctrl span{width:13px;height:13px;border-radius:50%;background:#2b2440;border:1px solid var(--line2);transition:.2s}
+  .wctrl span:nth-child(1):hover{background:var(--gold)} .wctrl span:nth-child(2):hover{background:var(--teal)} .wctrl span:nth-child(3):hover{background:var(--ember)}
+
+  .body{flex:1;display:grid;grid-template-columns:1.15fr .85fr;min-height:0}
+
+  /* ---------- hero (left) ---------- */
+  .hero{position:relative;display:flex;flex-direction:column;justify-content:center;
+    padding:0 64px;gap:26px;overflow:hidden}
+  .sigil{position:absolute;left:-7%;top:50%;width:560px;height:560px;transform:translateY(-50%);
+    color:var(--arcane);opacity:.5;pointer-events:none;animation:spin 60s linear infinite;
+    filter:drop-shadow(0 0 30px rgba(168,117,255,.4))}
+  .sigil.inner{width:380px;left:-1%;opacity:.35;animation:spin 40s linear infinite reverse}
+  @keyframes spin{to{transform:translateY(-50%) rotate(360deg)}}
+
+  .eyebrow{position:relative;font-family:"Cinzel",serif;letter-spacing:.5em;font-size:12px;
+    text-transform:uppercase;color:var(--teal);opacity:0;animation:rise .8s .1s forwards}
+  .title{position:relative;font-family:"Cinzel Decorative","Cinzel",serif;font-weight:900;
+    font-size:clamp(64px,9vw,128px);line-height:.86;letter-spacing:.02em;
+    background:linear-gradient(180deg,#fff 0%,var(--arcane-bright) 45%,var(--arcane-deep) 120%);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    text-shadow:0 0 60px rgba(168,117,255,.35);opacity:0;animation:rise .9s .2s forwards}
+  .title .ae{color:var(--gold);-webkit-text-fill-color:var(--gold);
+    text-shadow:0 0 40px rgba(243,201,122,.6)}
+  .tagline{position:relative;max-width:430px;font-size:18px;font-weight:300;color:var(--muted);
+    line-height:1.55;font-style:italic;opacity:0;animation:rise .9s .35s forwards}
+  .tagline b{color:var(--text);font-style:normal;font-weight:500}
+
+  .meta{position:relative;display:flex;gap:22px;align-items:center;opacity:0;animation:rise .9s .5s forwards}
+  .pill{display:flex;align-items:center;gap:9px;font-family:"Space Mono",monospace;font-size:12px;
+    color:var(--muted);padding:7px 14px;border:1px solid var(--line);border-radius:999px;
+    background:rgba(20,15,40,.5)}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--teal);box-shadow:0 0 10px var(--teal);
+    animation:pulse 2s infinite}
+  @keyframes pulse{50%{opacity:.4;transform:scale(.8)}}
+  .pill b{color:var(--text);font-weight:700}
+
+  .actions{position:relative;display:flex;align-items:center;gap:18px;margin-top:8px;
+    opacity:0;animation:rise .9s .65s forwards}
+  .play{position:relative;font-family:"Cinzel",serif;font-weight:700;letter-spacing:.18em;
+    text-transform:uppercase;font-size:18px;color:#1a0f2e;border:none;cursor:pointer;
+    padding:20px 46px;border-radius:14px;
+    background:linear-gradient(135deg,var(--gold) 0%,#ffe6b0 30%,var(--arcane-bright) 100%);
+    box-shadow:0 10px 40px rgba(168,117,255,.45),0 0 0 1px rgba(255,255,255,.25) inset;
+    transition:transform .18s cubic-bezier(.2,.8,.2,1),box-shadow .25s;overflow:hidden}
+  .play::before{content:"";position:absolute;inset:-2px;border-radius:16px;z-index:-1;
+    background:conic-gradient(from 0deg,var(--arcane),var(--teal),var(--gold),var(--ember),var(--arcane));
+    filter:blur(10px);opacity:.85;animation:spin 6s linear infinite}
+  .play:hover{transform:translateY(-3px) scale(1.02);box-shadow:0 16px 56px rgba(168,117,255,.7)}
+  .play:active{transform:translateY(0) scale(.99)}
+  .play .glint{position:absolute;top:0;left:-120%;width:60%;height:100%;
+    background:linear-gradient(100deg,transparent,rgba(255,255,255,.55),transparent);
+    transform:skewX(-18deg);animation:glint 3.6s 1.2s infinite}
+  @keyframes glint{0%,70%{left:-120%}85%{left:130%}100%{left:130%}}
+
+  .iconbtn{display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;
+    background:transparent;border:none;color:var(--muted);font-family:"Cinzel",serif;
+    font-size:10px;letter-spacing:.12em;text-transform:uppercase;transition:.2s}
+  .iconbtn .ic{width:50px;height:50px;display:grid;place-items:center;border-radius:12px;
+    border:1px solid var(--line);background:rgba(20,15,40,.55);transition:.22s}
+  .iconbtn .ic svg{width:22px;height:22px;color:var(--arcane)}
+  .iconbtn:hover{color:var(--text)}
+  .iconbtn:hover .ic{border-color:var(--line2);background:rgba(168,117,255,.14);
+    box-shadow:var(--glow);transform:translateY(-2px)}
+
+  /* ---------- side panel (right) ---------- */
+  .side{display:flex;flex-direction:column;gap:16px;padding:30px 34px 26px;
+    background:linear-gradient(180deg,rgba(21,15,40,.55),rgba(10,7,22,.78));
+    border-left:1px solid var(--line);backdrop-filter:blur(10px);min-height:0;
+    opacity:0;animation:fade 1s .4s forwards}
+  .card{border:1px solid var(--line);border-radius:16px;background:rgba(16,11,32,.6);
+    overflow:hidden}
+  .card .hd{display:flex;align-items:center;gap:10px;padding:14px 18px;
+    border-bottom:1px solid var(--line);font-family:"Cinzel",serif;font-weight:600;
+    letter-spacing:.16em;text-transform:uppercase;font-size:12px;color:var(--arcane-bright)}
+  .card .hd .tag{margin-left:auto;font-family:"Space Mono",monospace;font-size:10px;
+    color:var(--void);background:var(--teal);padding:3px 9px;border-radius:6px;letter-spacing:.05em}
+  .news{flex:1;min-height:0;display:flex;flex-direction:column}
+  .news .body{padding:6px 8px;overflow:auto}
+  .entry{display:flex;gap:14px;padding:14px 12px;border-radius:12px;transition:.2s;cursor:pointer}
+  .entry:hover{background:rgba(168,117,255,.08)}
+  .entry .date{font-family:"Space Mono",monospace;font-size:10px;color:var(--muted2);
+    white-space:nowrap;padding-top:3px;min-width:54px}
+  .entry h4{font-family:"Cinzel",serif;font-size:15px;font-weight:600;color:var(--text);margin-bottom:3px}
+  .entry p{font-size:13px;font-weight:300;color:var(--muted);line-height:1.45}
+  .entry .spark{color:var(--gold)}
+
+  /* update / progress */
+  .update{padding:16px 18px}
+  .update .row{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+  .update .stat{font-family:"Cinzel",serif;font-size:14px;color:var(--text);font-weight:600}
+  .update .sub{font-size:12px;color:var(--muted);font-weight:300}
+  .ok{margin-left:auto;display:flex;align-items:center;gap:7px;color:var(--teal);
+    font-family:"Space Mono",monospace;font-size:11px}
+  .bar{height:8px;border-radius:999px;background:rgba(168,117,255,.12);overflow:hidden}
+  .bar i{display:block;height:100%;width:100%;border-radius:999px;
+    background:linear-gradient(90deg,var(--arcane),var(--teal));
+    box-shadow:0 0 14px rgba(70,230,214,.6)}
+  .terminal{font-family:"Space Mono",monospace;font-size:11px;color:var(--muted);
+    background:rgba(6,4,14,.7);border-top:1px solid var(--line);padding:12px 16px;
+    height:96px;overflow:hidden;line-height:1.7}
+  .terminal .t{color:var(--teal)} .terminal .w{color:var(--gold)} .terminal .ok2{color:var(--arcane-bright)}
+
+  .footer{display:flex;align-items:center;gap:16px;padding:10px 18px;
+    font-family:"Space Mono",monospace;font-size:11px;color:var(--muted2);
+    border-top:1px solid var(--line)}
+  .footer .s{display:flex;align-items:center;gap:7px}
+  .footer .s .d{width:7px;height:7px;border-radius:50%;background:var(--teal);box-shadow:0 0 8px var(--teal)}
+  .footer .grow{margin-left:auto}
+
+  @keyframes rise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+  @keyframes fade{to{opacity:1}}
+</style>
+</head>
+<body>
+  <canvas id="fx"></canvas>
+  <div class="mesh"></div>
+  <div class="grain"></div>
+  <div class="vignette"></div>
+
+  <div class="app">
+    <!-- title bar -->
+    <div class="titlebar">
+      <div class="brand-mini">
+        <svg class="rune" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2l3 6 6 1-4.5 4.3L18 22l-6-3.4L6 22l1.5-8.7L3 9l6-1z"/></svg>
+        XMAGE
+      </div>
+      <nav class="tnav">
+        <a class="on">Play</a><a>Collection</a><a>Settings</a><a>About</a>
+      </nav>
+      <div class="wctrl"><span></span><span></span><span></span></div>
+    </div>
+
+    <div class="body">
+      <!-- hero -->
+      <section class="hero">
+        <svg class="sigil" viewBox="0 0 200 200" fill="none" stroke="currentColor" stroke-width=".7">
+          <circle cx="100" cy="100" r="96"/><circle cx="100" cy="100" r="74"/>
+          <polygon points="100,12 176,150 24,150"/><polygon points="100,188 24,50 176,50"/>
+          <circle cx="100" cy="100" r="40"/>
+          <g stroke-width="1.1">
+            <path d="M100 60v80M60 100h80"/><circle cx="100" cy="100" r="8"/>
+          </g>
+        </svg>
+        <svg class="sigil inner" viewBox="0 0 200 200" fill="none" stroke="currentColor" stroke-width="1">
+          <circle cx="100" cy="100" r="90"/>
+          <polygon points="100,20 160,140 40,140" stroke-dasharray="3 6"/>
+        </svg>
+
+        <div class="eyebrow">Magic · Another Game Engine</div>
+        <h1 class="title">XM<span class="ae">A</span>GE</h1>
+        <p class="tagline">Summon <b>28,000+</b> spells. Duel the world or your own machine. The full game, fully enforced — <b>now wreathed in arcane dark.</b></p>
+
+        <div class="meta">
+          <span class="pill"><span class="dot"></span> play.darrellbest.com · <b>online</b></span>
+          <span class="pill">build <b>1.4.58</b></span>
+          <span class="pill"><b>142</b> mages online</span>
+        </div>
+
+        <div class="actions">
+          <button class="play"><span class="glint"></span>Enter the Fray</button>
+          <button class="iconbtn"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></svg></span>Local Server</button>
+          <button class="iconbtn"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13.5a7.8 7.8 0 000-3l1.8-1.4-2-3.4-2.1.9a7.8 7.8 0 00-2.6-1.5L12 2H8l-.5 2.6A7.8 7.8 0 005 6.1l-2.1-.9-2 3.4 1.8 1.4a7.8 7.8 0 000 3L.9 14.5l2 3.4 2.1-.9a7.8 7.8 0 002.6 1.5L8 21h4l.5-2.6"/></svg></span>Settings</button>
+        </div>
+      </section>
+
+      <!-- side panel -->
+      <aside class="side">
+        <div class="card update">
+          <div class="row">
+            <div>
+              <div class="stat">Your client is up to date</div>
+              <div class="sub">Last checked moments ago · v1.4.58-V1</div>
+            </div>
+            <span class="ok">✦ READY</span>
+          </div>
+          <div class="bar"><i></i></div>
+        </div>
+
+        <div class="card news">
+          <div class="hd"><svg style="width:15px;height:15px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 5h16M4 12h16M4 19h10"/></svg> Latest Conjurings <span class="tag">PATCH</span></div>
+          <div class="body">
+            <div class="entry"><div class="date">05·24</div><div><h4>Reworked AI &amp; bracket levels <span class="spark">✦</span></h4><p>Smarter mulligans, archetype-aware blocking, and 1,200 freshly-implemented cards enter the pool.</p></div></div>
+            <div class="entry"><div class="date">05·18</div><div><h4>Commander &amp; Oathbreaker tuning</h4><p>Faster table setup, refined mana hints, and new sample decks for ten-player chaos.</p></div></div>
+            <div class="entry"><div class="date">05·11</div><div><h4>Arcane theme arrives</h4><p>A cohesive dark look across launcher and client. Your eyes can thank us later.</p></div></div>
+            <div class="entry"><div class="date">05·02</div><div><h4>Draft &amp; sealed stability</h4><p>Crash recovery for interrupted drafts and smoother cube imports.</p></div></div>
+          </div>
+          <div class="terminal" id="term"></div>
+        </div>
+
+        <div class="footer">
+          <span class="s"><span class="d"></span> servers nominal</span>
+          <span>ping <b style="color:var(--text)">38ms</b></span>
+          <span class="grow">java 21 · arcane build</span>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+<script>
+/* ember/mote particle field */
+const c=document.getElementById('fx'),x=c.getContext('2d');let W,H,P=[];
+function rs(){W=c.width=innerWidth;H=c.height=innerHeight;}
+addEventListener('resize',rs);rs();
+const COLS=['168,117,255','70,230,214','243,201,122','255,125,77'];
+for(let i=0;i<70;i++)P.push({x:Math.random()*W,y:Math.random()*H,r:Math.random()*2.2+.4,
+  s:Math.random()*.5+.12,d:Math.random()*Math.PI*2,c:COLS[i%COLS.length],a:Math.random()*.5+.2});
+function tick(){
+  x.clearRect(0,0,W,H);
+  for(const p of P){
+    p.y-=p.s;p.x+=Math.sin(p.d+=.01)*.25;
+    if(p.y<-10){p.y=H+10;p.x=Math.random()*W}
+    x.beginPath();x.arc(p.x,p.y,p.r,0,7);
+    x.fillStyle='rgba('+p.c+','+p.a+')';
+    x.shadowBlur=12;x.shadowColor='rgba('+p.c+',.9)';x.fill();
+  }
+  requestAnimationFrame(tick);
+}tick();
+
+/* fake console stream */
+const lines=[
+ ['t','> bootstrapping arcane runtime…'],
+ ['','  symbols cache ............ ok'],
+ ['','  plugins: card · theme · counter loaded'],
+ ['ok2','✦ connected to play.darrellbest.com:17171'],
+ ['','  authenticated as Angel_Test'],
+ ['w','  142 mages in the lobby — ready to duel'],
+];
+const term=document.getElementById('term');let li=0;
+function feed(){if(li>=lines.length)return;const[cls,txt]=lines[li++];
+  const d=document.createElement('div');if(cls)d.className=cls;d.textContent=txt;
+  term.appendChild(d);while(term.children.length>5)term.removeChild(term.firstChild);
+  setTimeout(feed,650);}
+setTimeout(feed,500);
+</script>
+</body>
+</html>
