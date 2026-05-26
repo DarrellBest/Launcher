@@ -15,7 +15,7 @@ import static com.xmage.launcher.Utilities.getInstallPath;
 public class Config {
     private static final String PROPERTIES_FILE = "installed.properties";
     private static final String VERSION_FILE = "/version.properties";
-    private static final String MAIN_BRANCH_URL = "http://play.darrellbest.com";
+    private static final String MAIN_BRANCH_URL = "http://play.darrellbest.com:17080";
     private static final String OFFICIAL_BRANCH_URL = "https://xmage.today";
     private static final String DEFAULT_CLIENT_JAVA_OPTS = "-Xmx2000m -Dfile.encoding=UTF-8 -Dsun.jnu.encoding=UTF-8 -Djava.net.preferIPv4Stack=true";
     private static final String DEFAULT_SERVER_JAVA_OPTS = "-Xmx1000m";
