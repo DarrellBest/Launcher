@@ -37,35 +37,45 @@ $('min').onclick = () => window.xmage.winMin();
 $('close').onclick = () => window.xmage.winClose();
 document.querySelectorAll('.tnav a').forEach((a) => a.onclick = () => window.xmage.openUrl(a.dataset.url));
 
-let CFG = null, READY = false, BUSY = false;
+let CFG = null, READY = false, BUSY = false, UPDATE_AVAIL = false, NEEDS_INSTALL = false;
 
-function setBadge(cls, text, onclick) {
-  const b = $('badge'); b.className = 'badge ' + cls; b.textContent = text; b.onclick = onclick || null;
+// The hero button doubles as the update notifier: its label reflects current state.
+function refreshPlayButton() {
+  const label = NEEDS_INSTALL ? 'Install' : (UPDATE_AVAIL ? 'Update' : 'Enter the Fray');
+  $('play').innerHTML = '<span class="glint"></span>' + label;
 }
 
 async function doInstall() {
-  if (!CFG || BUSY) return;
-  BUSY = true; $('play').disabled = true; setBadge('new', '… working', null);
+  if (!CFG || BUSY) return false;
+  BUSY = true; $('play').disabled = true;
+  $('upstat').textContent = 'Working…'; $('upsub').textContent = 'installing / updating';
   log('sys', '▶ Installing / updating from play.darrellbest.com…');
+  let ok = false;
   try {
     const r = await window.xmage.runInstall(CFG);
     READY = r.clientInstalled;
+    NEEDS_INSTALL = false; UPDATE_AVAIL = false;
     $('ver').textContent = r.installedVersion;
     $('upstat').textContent = 'Up to date'; $('upsub').textContent = 'v' + r.installedVersion;
-    setBadge('ok', '✦ READY');
-    $('play').disabled = false;
     log('ok2', 'Install complete — ready to play.');
+    ok = READY;
   } catch (e) {
     log('err', 'Install failed: ' + (e.message || e));
-    setBadge('new', '⬇ RETRY', doInstall);
+    $('upstat').textContent = 'Update failed'; $('upsub').textContent = 'click to retry';
   }
+  refreshPlayButton();
+  $('play').disabled = false;
   BUSY = false;
+  return ok;
 }
 
-// "Enter the Fray": install if needed, then launch
+// Hero button installs/updates if needed, then launches (auto-launch after update).
 $('play').onclick = async () => {
   if (BUSY) return;
-  if (!READY) { await doInstall(); if (!READY) return; }
+  if (NEEDS_INSTALL || UPDATE_AVAIL || !READY) {
+    const ok = await doInstall();
+    if (!ok) return;
+  }
   $('play').disabled = true;
   log('sys', '▶ Entering the fray…');
   const ok = await window.xmage.launchClient();
@@ -91,20 +101,20 @@ async function boot() {
     const avail = CFG.XMage.version, inst = info.installedVersion;
     log('sys', 'Config OK. Available: ' + avail + ' · Installed: ' + inst);
     if (!info.clientInstalled || !info.javaInstalled) {
+      NEEDS_INSTALL = true; READY = false;
       $('upstat').textContent = 'Install required'; $('upsub').textContent = (info.javaInstalled ? '' : 'Java + ') + 'XMage ' + avail;
-      setBadge('new', '⬇ INSTALL', doInstall); READY = false;
     } else if (avail !== inst) {
+      UPDATE_AVAIL = true;
       $('upstat').textContent = 'Update available'; $('upsub').textContent = avail;
-      setBadge('new', '⬇ UPDATE', doInstall);
     } else {
       $('upstat').textContent = 'Up to date'; $('upsub').textContent = 'v' + inst;
-      setBadge('ok', '✦ READY');
     }
+    refreshPlayButton();
   } catch (e) {
     $('srvdot').className = 'dot bad';
     $('upstat').textContent = 'Server unreachable'; $('upsub').textContent = String(e.message || e);
-    setBadge('ok', '✕ OFFLINE');
     log('err', 'Config fetch failed: ' + (e.message || e));
+    refreshPlayButton();
   }
 }
 boot();
