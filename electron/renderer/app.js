@@ -35,7 +35,15 @@ window.xmage.onPhase((text) => { $('upstat').textContent = text; });
 // ---- window controls + links ----
 $('min').onclick = () => window.xmage.winMin();
 $('close').onclick = () => window.xmage.winClose();
-document.querySelectorAll('.tnav a').forEach((a) => a.onclick = () => window.xmage.openUrl(a.dataset.url));
+document.querySelectorAll('.tnav a[data-url]').forEach((a) => a.onclick = () => window.xmage.openUrl(a.dataset.url));
+// Force update: re-download + reinstall the current build, bypassing the "up to date"
+// check. Heals a stuck/mismatched install (e.g. client/server version mismatch).
+$('forceUpdate').onclick = async () => {
+  if (BUSY || !CFG) return;
+  log('sys', '▶ Force update — reinstalling current build…');
+  const ok = await doInstall(true);
+  log(ok ? 'ok2' : 'err', ok ? 'Force update complete — ready to play.' : 'Force update failed.');
+};
 
 let CFG = null, READY = false, BUSY = false, UPDATE_AVAIL = false, NEEDS_INSTALL = false;
 
@@ -45,14 +53,14 @@ function refreshPlayButton() {
   $('play').innerHTML = '<span class="glint"></span>' + label;
 }
 
-async function doInstall() {
+async function doInstall(force) {
   if (!CFG || BUSY) return false;
   BUSY = true; $('play').disabled = true;
   $('upstat').textContent = 'Working…'; $('upsub').textContent = 'installing / updating';
   log('sys', '▶ Installing / updating from play.darrellbest.com…');
   let ok = false;
   try {
-    const r = await window.xmage.runInstall(CFG);
+    const r = await window.xmage.runInstall(CFG, force);
     READY = r.clientInstalled;
     NEEDS_INSTALL = false; UPDATE_AVAIL = false;
     $('ver').textContent = r.installedVersion;

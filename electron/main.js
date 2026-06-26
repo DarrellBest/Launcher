@@ -107,22 +107,32 @@ async function ensureJava(cfg) {
   writeProp('java.version', ver);
   log('ok2', 'Java installed.');
 }
-async function ensureXMage(cfg) {
+async function ensureXMage(cfg, force) {
   const avail = cfg.XMage.version, inst = readProp('xmage.version');
-  if (clientInstalled() && avail === inst) { log('sys', 'XMage already up to date.'); return; }
+  if (!force && clientInstalled() && avail === inst) { log('sys', 'XMage already up to date.'); return; }
+  if (force) log('sys', 'Force update: reinstalling current build (' + avail + ')…');
   const tmp = path.join(os.tmpdir(), 'xmage-update.zip');
   log('sys', 'Downloading XMage from ' + cfg.XMage.location);
   send('phase', 'Downloading XMage…');
   await download(cfg.XMage.location, tmp, (p) => send('progress', p));
   log('sys', 'Installing XMage…'); send('phase', 'Installing XMage…'); send('progress', 1);
   fs.mkdirSync(XMAGE_DIR, { recursive: true });
+  // Remove old version-stamped jars before extracting. mage-*.jar files carry the
+  // version in their name (mage-1.4.59.jar vs mage-1.4.60.jar), so unzipping a new
+  // build on top would leave BOTH on the lib/* classpath — the client can then load
+  // the stale MageVersion and fail the server handshake ("wrong client version").
+  // The zip fully repopulates lib/, so clearing it first is safe. (plugins/ jars are
+  // versioned independently, aren't duplicated, and may cache images — left alone.)
+  for (const sub of ['mage-client/lib', 'mage-server/lib']) {
+    try { fs.rmSync(path.join(XMAGE_DIR, sub), { recursive: true, force: true }); } catch (_) {}
+  }
   await extractZip(tmp, { dir: XMAGE_DIR });
   writeProp('xmage.version', avail);
   log('ok2', 'XMage installed: ' + avail);
 }
-async function install(cfg) {
+async function install(cfg, force) {
   await ensureJava(cfg);
-  await ensureXMage(cfg);
+  await ensureXMage(cfg, force);
   send('phase', 'Ready'); send('progress', 1);
 }
 
@@ -151,7 +161,7 @@ ipcMain.handle('app:info', () => ({
   javaInstalled: !!findJavaHome(), clientInstalled: clientInstalled(), installedVersion: readProp('xmage.version') || '(none)'
 }));
 ipcMain.handle('config:get', async () => JSON.parse(await httpGet(CONFIG_URL)));
-ipcMain.handle('install:run', async (_e, cfg) => { await install(cfg); return { installedVersion: readProp('xmage.version'), clientInstalled: clientInstalled() }; });
+ipcMain.handle('install:run', async (_e, cfg, force) => { await install(cfg, force); return { installedVersion: readProp('xmage.version'), clientInstalled: clientInstalled() }; });
 ipcMain.handle('client:launch', () => launch('client'));
 ipcMain.handle('server:launch', () => launch('server'));
 ipcMain.handle('open:url', (_e, u) => shell.openExternal(u));

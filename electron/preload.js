@@ -4,7 +4,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('xmage', {
   appInfo: () => ipcRenderer.invoke('app:info'),
   getConfig: () => ipcRenderer.invoke('config:get'),
-  runInstall: (cfg) => ipcRenderer.invoke('install:run', cfg),
+  runInstall: (cfg, force) => ipcRenderer.invoke('install:run', cfg, force),
   launchClient: () => ipcRenderer.invoke('client:launch'),
   launchServer: () => ipcRenderer.invoke('server:launch'),
   openUrl: (u) => ipcRenderer.invoke('open:url', u),
