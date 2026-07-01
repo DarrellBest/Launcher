@@ -5,6 +5,8 @@ contextBridge.exposeInMainWorld('xmage', {
   appInfo: () => ipcRenderer.invoke('app:info'),
   getConfig: () => ipcRenderer.invoke('config:get'),
   runInstall: (cfg, force) => ipcRenderer.invoke('install:run', cfg, force),
+  getSettings: () => ipcRenderer.invoke('settings:get'),
+  saveSettings: (s) => ipcRenderer.invoke('settings:set', s),
   launchClient: () => ipcRenderer.invoke('client:launch'),
   launchServer: () => ipcRenderer.invoke('server:launch'),
   openUrl: (u) => ipcRenderer.invoke('open:url', u),

@@ -90,6 +90,24 @@
   .footer .grow{margin-left:auto}
   @keyframes rise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
   @keyframes fade{to{opacity:1}}
+  /* ---- settings modal ---- */
+  .modal-wrap{position:fixed;inset:0;z-index:20;display:grid;place-items:center;background:rgba(7,5,18,.72);-webkit-app-region:no-drag}
+  .modal{width:460px;max-width:92vw;border:1px solid var(--line2);border-radius:16px;background:linear-gradient(180deg,#150f28,#0c0820);box-shadow:0 30px 80px rgba(0,0,0,.6),var(--glow);animation:rise .22s ease}
+  .mhd{display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid var(--line);font-family:"Cinzel",serif;font-weight:600;letter-spacing:.14em;text-transform:uppercase;font-size:12px;color:var(--arcane-bright)}
+  .mx{margin-left:auto;background:transparent;border:none;color:var(--muted);font-size:15px;cursor:pointer}
+  .mx:hover{color:var(--ember)}
+  .mbody{padding:18px;display:flex;flex-direction:column;gap:14px}
+  .fld{display:flex;flex-direction:column;gap:6px;font-family:"Cinzel",serif;font-size:11px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase}
+  .fld select,.fld input[type=text]{font-family:"Space Mono",monospace;font-size:13px;color:var(--text);background:rgba(20,15,40,.7);border:1px solid var(--line2);border-radius:9px;padding:9px 11px;text-transform:none;letter-spacing:0}
+  .fld select:focus,.fld input:focus{outline:none;border-color:var(--arcane);box-shadow:var(--glow)}
+  .fld.chk{flex-direction:row;align-items:center;gap:9px}
+  .fld.chk input{width:16px;height:16px;accent-color:var(--arcane)}
+  .fld.chk span{text-transform:none;letter-spacing:0;font-family:"Space Mono",monospace;font-size:12px;color:var(--text)}
+  .mfoot{display:flex;justify-content:flex-end;gap:10px;padding:14px 18px;border-top:1px solid var(--line)}
+  .btn{font-family:"Cinzel",serif;font-weight:600;letter-spacing:.1em;text-transform:uppercase;font-size:12px;color:var(--text);background:rgba(20,15,40,.7);border:1px solid var(--line2);border-radius:10px;padding:9px 18px;cursor:pointer;transition:.18s}
+  .btn:hover{border-color:var(--arcane);background:rgba(28,21,54,.9)}
+  .btn.gold{color:#1a0f2e;border:none;background:linear-gradient(135deg,var(--gold),#ffe6b0 40%,var(--arcane-bright))}
+  .btn.gold:hover{transform:translateY(-1px)}
 </style>
 </head>
 <body>
@@ -98,7 +116,7 @@
   <div class="app">
     <div class="titlebar">
       <div class="brand-mini"><svg class="rune" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2l3 6 6 1-4.5 4.3L18 22l-6-3.4L6 22l1.5-8.7L3 9l6-1z"/></svg> XMAGE</div>
-      <nav class="tnav"><a data-url="https://github.com/DarrellBest/mage-modern">Github</a><a data-url="https://discord.gg/Pqf42yn">Discord</a><a id="forceUpdate" title="Re-download and reinstall the current build (fixes a stuck/mismatched version)">⟳ Force update</a></nav>
+      <nav class="tnav"><a data-url="https://github.com/DarrellBest/mage-modern">Github</a><a data-url="https://discord.gg/Pqf42yn">Discord</a><a id="forceUpdate" title="Re-download and reinstall the current build (fixes a stuck/mismatched version)">⟳ Force update</a><a id="openSettings" title="Client settings — graphics pipeline, memory, Java runtime">⚙ Settings</a></nav>
       <div class="wctrl"><button id="min">—</button><button id="close" class="close">✕</button></div>
     </div>
     <div class="body">
@@ -130,6 +148,34 @@
         </div>
         <div class="footer"><span id="foot-install">…</span><span class="grow" id="foot-java">java 8 · fork build</span></div>
       </aside>
+    </div>
+  </div>
+  <div id="settings" class="modal-wrap" style="display:none">
+    <div class="modal">
+      <div class="mhd">⚙ Client Settings <button class="mx" id="setClose">✕</button></div>
+      <div class="mbody">
+        <label class="fld"><span>Graphics pipeline</span>
+          <select id="setGraphics">
+            <option value="auto">Auto — recommended</option>
+            <option value="d3d">Direct3D</option>
+            <option value="opengl">OpenGL — ⚠ can crash on Java 8</option>
+            <option value="software">Software — most compatible</option>
+          </select></label>
+        <label class="fld"><span>Memory (heap)</span>
+          <select id="setMemory">
+            <option value="2048">2 GB</option><option value="4096">4 GB</option>
+            <option value="6144">6 GB</option><option value="8192">8 GB</option>
+          </select></label>
+        <label class="fld"><span>Java runtime</span>
+          <select id="setJava">
+            <option value="bundled">Bundled — launcher JRE</option>
+            <option value="system">System — installed on this PC</option>
+          </select></label>
+        <label class="fld chk"><input type="checkbox" id="setIpv4"><span>Force IPv4 (-Djava.net.preferIPv4Stack)</span></label>
+        <label class="fld"><span>Advanced — extra JVM args</span>
+          <input type="text" id="setExtra" spellcheck="false" placeholder="e.g. -Dsun.java2d.dpiaware=false"></label>
+      </div>
+      <div class="mfoot"><button class="btn" id="setCancel">Cancel</button><button class="btn gold" id="setSave">Save</button></div>
     </div>
   </div>
   <script src="app.js"></script>

@@ -45,17 +45,20 @@ $('forceUpdate').onclick = async () => {
   log(ok ? 'ok2' : 'err', ok ? 'Force update complete — ready to play.' : 'Force update failed.');
 };
 
-let CFG = null, READY = false, BUSY = false, UPDATE_AVAIL = false, NEEDS_INSTALL = false;
+let CFG = null, READY = false, BUSY = false, UPDATE_AVAIL = false, NEEDS_INSTALL = false, CLIENT_RUNNING = false;
 
-// The hero button doubles as the update notifier: its label reflects current state.
+// The hero button doubles as the update notifier AND launch guard: its label reflects
+// state, and it's disabled while busy OR a client is already running (no double-launch).
 function refreshPlayButton() {
-  const label = NEEDS_INSTALL ? 'Install' : (UPDATE_AVAIL ? 'Update' : 'Enter the Fray');
+  const label = CLIENT_RUNNING ? 'In the fray…'
+    : (NEEDS_INSTALL ? 'Install' : (UPDATE_AVAIL ? 'Update' : 'Enter the Fray'));
   $('play').innerHTML = '<span class="glint"></span>' + label;
+  $('play').disabled = BUSY || CLIENT_RUNNING;
 }
 
 async function doInstall(force) {
   if (!CFG || BUSY) return false;
-  BUSY = true; $('play').disabled = true;
+  BUSY = true; refreshPlayButton();
   $('upstat').textContent = 'Working…'; $('upsub').textContent = 'installing / updating';
   log('sys', '▶ Installing / updating from play.darrellbest.com…');
   let ok = false;
@@ -71,28 +74,63 @@ async function doInstall(force) {
     log('err', 'Install failed: ' + (e.message || e));
     $('upstat').textContent = 'Update failed'; $('upsub').textContent = 'click to retry';
   }
-  refreshPlayButton();
-  $('play').disabled = false;
   BUSY = false;
+  refreshPlayButton();
   return ok;
 }
 
 // Hero button installs/updates if needed, then launches (auto-launch after update).
 $('play').onclick = async () => {
-  if (BUSY) return;
+  if (BUSY || CLIENT_RUNNING) return;
   if (NEEDS_INSTALL || UPDATE_AVAIL || !READY) {
     const ok = await doInstall();
     if (!ok) return;
   }
-  $('play').disabled = true;
+  BUSY = true; refreshPlayButton();
   log('sys', '▶ Entering the fray…');
   const ok = await window.xmage.launchClient();
-  if (!ok) { $('play').disabled = false; log('err', 'Client failed to launch.'); }
-  else setTimeout(() => { $('play').disabled = false; }, 4000);
+  BUSY = false;
+  if (ok) CLIENT_RUNNING = true;   // proc:state(exit) re-enables the button when the client closes
+  else log('err', 'Client failed to launch.');
+  refreshPlayButton();
 };
 $('server').onclick = async () => {
   if (!READY) { await doInstall(); if (!READY) return; }
   log('sys', '▶ Starting local server…'); await window.xmage.launchServer();
+};
+
+// Track the running client so the play button stays disabled until it exits.
+window.xmage.onProcState((p) => {
+  if (p.kind !== 'client') return;
+  CLIENT_RUNNING = p.running;
+  refreshPlayButton();
+});
+
+// ---- client settings modal ----
+async function openSettings() {
+  const s = await window.xmage.getSettings();
+  $('setGraphics').value = s.graphics;
+  $('setMemory').value = s.memory;
+  $('setJava').value = s.java;
+  $('setIpv4').checked = s.ipv4 === 'true';
+  $('setExtra').value = s.extraArgs || '';
+  $('settings').style.display = '';
+}
+function closeSettings() { $('settings').style.display = 'none'; }
+$('openSettings').onclick = openSettings;
+$('setClose').onclick = closeSettings;
+$('setCancel').onclick = closeSettings;
+$('settings').onclick = (e) => { if (e.target === $('settings')) closeSettings(); }; // click backdrop to dismiss
+$('setSave').onclick = async () => {
+  await window.xmage.saveSettings({
+    graphics: $('setGraphics').value,
+    memory: $('setMemory').value,
+    java: $('setJava').value,
+    ipv4: $('setIpv4').checked ? 'true' : 'false',
+    extraArgs: $('setExtra').value.trim(),
+  });
+  log('sys', '⚙ Client settings saved — applied on next launch.');
+  closeSettings();
 };
 
 async function boot() {

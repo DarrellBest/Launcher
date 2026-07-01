@@ -17,11 +17,9 @@ const JAVA_DIR = path.join(INSTALL_ROOT, 'java');
 const PROPS = path.join(INSTALL_ROOT, 'installed.properties');
 const PLAT = process.platform; // 'win32' | 'darwin' | 'linux'
 const JAVA_SUFFIX = PLAT === 'win32' ? 'windows-x64' : PLAT === 'darwin' ? 'macosx-x64' : 'linux-x64';
-// Performance/graphics flags (per the project readme's "Performance tweaks").
-// OpenGL accelerates rendering on capable GPUs; on Linux it has a known file-
-// chooser bug (deck loading), so use XRender there instead.
-const GRAPHICS_OPTS = PLAT === 'linux' ? ['-Dsun.java2d.xrender=true'] : ['-Dsun.java2d.opengl=true'];
-const CLIENT_OPTS = ['-Xmx4096m', ...GRAPHICS_OPTS, '-Dfile.encoding=UTF-8', '-Dsun.jnu.encoding=UTF-8', '-Djava.net.preferIPv4Stack=true'];
+// Client JVM options are built dynamically from user settings (see buildClientOpts).
+// These encoding flags are always on; server heap is fixed.
+const ENCODING_OPTS = ['-Dfile.encoding=UTF-8', '-Dsun.jnu.encoding=UTF-8'];
 const SERVER_OPTS = ['-Xmx1024m'];
 
 let win;
@@ -89,6 +87,51 @@ function findJavaHome() {
 function clientInstalled() {
   try { return fs.readdirSync(path.join(XMAGE_DIR, 'mage-client', 'lib')).some((f) => /^mage-client.*\.jar$/.test(f)); } catch (_) { return false; }
 }
+
+// ---- client settings (persisted in installed.properties under client.*) ----
+const SETTINGS_DEFAULTS = { graphics: 'auto', memory: '4096', java: 'bundled', ipv4: 'true', extraArgs: '' };
+function getSettings() {
+  const s = {};
+  for (const k of Object.keys(SETTINGS_DEFAULTS)) { const v = readProp('client.' + k); s[k] = v !== '' ? v : SETTINGS_DEFAULTS[k]; }
+  return s;
+}
+function saveSettings(s) {
+  for (const k of Object.keys(SETTINGS_DEFAULTS)) if (s[k] !== undefined) writeProp('client.' + k, String(s[k]));
+}
+// Map a graphics-pipeline choice to Java2D flags (platform-aware for "auto").
+function graphicsFlags(choice) {
+  switch (choice) {
+    case 'opengl':   return ['-Dsun.java2d.opengl=true']; // opt-in; can native-crash on Java 8/Windows
+    case 'd3d':      return PLAT === 'win32' ? ['-Dsun.java2d.d3d=true'] : [];
+    case 'software': return ['-Dsun.java2d.d3d=false', '-Dsun.java2d.opengl=false', '-Dsun.java2d.noddraw=true'];
+    default:         return PLAT === 'linux' ? ['-Dsun.java2d.xrender=true'] : []; // auto: Java default (D3D on Windows) is crash-safe
+  }
+}
+function buildClientOpts() {
+  const s = getSettings();
+  const mem = /^\d+$/.test(String(s.memory)) ? s.memory : SETTINGS_DEFAULTS.memory;
+  const extra = String(s.extraArgs || '').trim() ? s.extraArgs.trim().split(/\s+/) : [];
+  return ['-Xmx' + mem + 'm', ...graphicsFlags(s.graphics), ...ENCODING_OPTS,
+    ...(s.ipv4 === 'true' ? ['-Djava.net.preferIPv4Stack=true'] : []), ...extra];
+}
+// Resolve which JVM runs the client: bundled jre* or the machine's system Java.
+function findSystemJava() {
+  const jh = process.env.JAVA_HOME;
+  if (jh) { const b = path.join(jh, 'bin', PLAT === 'win32' ? 'java.exe' : 'java'); if (fs.existsSync(b)) return jh; }
+  if (PLAT === 'win32') {
+    for (const base of ['C:\\Program Files\\Java', 'C:\\Program Files (x86)\\Java']) {
+      try { for (const d of fs.readdirSync(base).filter((n) => /^(jre|jdk)/.test(n)).sort().reverse()) {
+        if (fs.existsSync(path.join(base, d, 'bin', 'java.exe'))) return path.join(base, d);
+      } } catch (_) {}
+    }
+  }
+  return null;
+}
+function resolveClientJavaHome() {
+  if (getSettings().java === 'system') { const sys = findSystemJava(); if (sys) return sys; log('err', 'System Java not found — using bundled.'); }
+  return findJavaHome();
+}
+
 function send(ch, p) { if (win && !win.isDestroyed()) win.webContents.send(ch, p); }
 function log(kind, text) { send('console:line', { kind, text }); }
 
@@ -138,13 +181,15 @@ async function install(cfg, force) {
 
 // ---- launch ----
 function launch(kind) {
-  const home = findJavaHome();
+  if (procs[kind]) { log('sys', kind + ' is already running.'); return true; } // never double-launch (shared H2 mmap crashes)
+  const home = kind === 'client' ? resolveClientJavaHome() : findJavaHome();
   const dir = path.join(XMAGE_DIR, kind === 'client' ? 'mage-client' : 'mage-server');
   if (!home || !fs.existsSync(dir)) { log('err', kind + ': not installed yet — run Install first.'); return false; }
   const bin = path.join(home, 'bin', PLAT === 'win32' ? 'java.exe' : 'java');
-  const opts = kind === 'client' ? CLIENT_OPTS : SERVER_OPTS;
+  const opts = kind === 'client' ? buildClientOpts() : SERVER_OPTS;
   const main = kind === 'client' ? 'mage.client.MageFrame' : 'mage.server.Main';
   const args = [...opts, '-cp', path.join(dir, 'lib', '*'), main];
+  if (kind === 'client') log('sys', 'Client JVM: ' + opts.join(' '));
   log('sys', 'Launching ' + kind + '…');
   const p = spawn(bin, args, { cwd: dir, env: { ...process.env, JAVA_HOME: home } });
   procs[kind] = p;
@@ -164,6 +209,8 @@ ipcMain.handle('config:get', async () => JSON.parse(await httpGet(CONFIG_URL)));
 ipcMain.handle('install:run', async (_e, cfg, force) => { await install(cfg, force); return { installedVersion: readProp('xmage.version'), clientInstalled: clientInstalled() }; });
 ipcMain.handle('client:launch', () => launch('client'));
 ipcMain.handle('server:launch', () => launch('server'));
+ipcMain.handle('settings:get', () => getSettings());
+ipcMain.handle('settings:set', (_e, s) => { saveSettings(s); return getSettings(); });
 ipcMain.handle('open:url', (_e, u) => shell.openExternal(u));
 ipcMain.handle('win:close', () => win.close());
 ipcMain.handle('win:min', () => win.minimize());

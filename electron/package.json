@@ -1,6 +1,6 @@
 {
   "name": "xmage-launcher",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "description": "Arcane Electron launcher for XMage (Darrell's Fork)",
   "main": "main.js",
   "scripts": {
