@@ -1,12 +1,13 @@
 {
   "name": "xmage-launcher",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Arcane Electron launcher for XMage (Darrell's Fork)",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "dist:linux": "electron-builder --linux AppImage",
-    "dist:win": "electron-builder --win portable"
+    "dist:win": "electron-builder --win portable",
+    "dist:mac": "electron-builder --mac dmg --universal"
   },
   "author": "Darrell Best",
   "license": "MIT",
@@ -41,6 +42,13 @@
         "portable"
       ],
       "signAndEditExecutable": false,
+      "artifactName": "XMageLauncher-${version}.${ext}"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.games",
       "artifactName": "XMageLauncher-${version}.${ext}"
     }
   }

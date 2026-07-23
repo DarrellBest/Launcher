@@ -1,0 +1,67 @@
+name: mac-build
+
+# Builds the universal (Intel + Apple Silicon) macOS dmg of the Electron launcher.
+# The dev boxes are Linux — electron-builder can only produce mac targets on macOS,
+# so this runs on a GitHub-hosted mac runner. Trigger by pushing a tag like
+# "mac-v1.2.1" (publishes a release with the dmg) or manually via workflow_dispatch.
+
+on:
+  push:
+    tags: ['mac-v*']
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  dmg:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: electron
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: electron/package-lock.json
+
+      - run: npm ci
+
+      - name: Build universal .app
+        run: npx electron-builder --mac dir --universal
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      # Ad-hoc signature: no Apple Developer ID, but arm64 macOS refuses to run
+      # binaries whose seal was broken by packaging. Users still right-click > Open
+      # (or Privacy & Security > Open Anyway) on first launch since it's not notarized.
+      - name: Ad-hoc sign
+        run: |
+          codesign --force --deep --sign - "dist/mac-universal/XMage Launcher.app"
+          codesign --verify --deep --strict "dist/mac-universal/XMage Launcher.app"
+
+      - name: Package dmg
+        run: |
+          VER=$(node -p "require('./package.json').version")
+          STAGE=$(mktemp -d)
+          cp -R "dist/mac-universal/XMage Launcher.app" "$STAGE/"
+          ln -s /Applications "$STAGE/Applications"
+          hdiutil create -volname "XMage Launcher" -srcfolder "$STAGE" -ov -format UDZO "dist/XMageLauncher-$VER.dmg"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-dmg
+          path: electron/dist/XMageLauncher-*.dmg
+
+      - name: Publish release (tag builds only)
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/XMageLauncher-*.dmg \
+            --title "Mac launcher $GITHUB_REF_NAME" \
+            --notes "Universal (Intel + Apple Silicon) macOS build of the XMage fork launcher." \
+          || gh release upload "$GITHUB_REF_NAME" dist/XMageLauncher-*.dmg --clobber

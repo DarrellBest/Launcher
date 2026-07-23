@@ -13,3 +13,5 @@ syntax: regexp
 .log
 *.iml
 *.log
+electron/node_modules/
+electron/dist/

@@ -217,3 +217,6 @@ ipcMain.handle('win:min', () => win.minimize());
 
 app.whenReady().then(createWindow);
 app.on('window-all-closed', () => { Object.values(procs).forEach((p) => { try { p.kill(); } catch (_) {} }); if (process.platform !== 'darwin') app.quit(); });
+// mac: the frameless window's custom ✕ closes the window while the app stays in the
+// dock — without this, clicking the dock icon can never bring the launcher back.
+app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
