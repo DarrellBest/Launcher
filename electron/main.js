@@ -8,9 +8,13 @@ const https = require('https');
 const { spawn } = require('child_process');
 const tar = require('tar');
 const extractZip = require('extract-zip');
+const { autoUpdater } = require('electron-updater');
 
 // ---- configuration ----
 const CONFIG_URL = process.env.XMAGE_CONFIG || 'http://play.darrellbest.com:17080/config.json';
+const GITHUB_OWNER = 'DarrellBest';
+const GITHUB_REPO = 'Launcher';
+const UPDATE_FALLBACK_URL = 'http://play.darrellbest.com:17080/files';
 const INSTALL_ROOT = process.env.XMAGE_HOME || path.join(os.homedir(), 'Documents', 'xmage');
 const XMAGE_DIR = path.join(INSTALL_ROOT, 'xmage');
 const JAVA_DIR = path.join(INSTALL_ROOT, 'java');
@@ -36,10 +40,11 @@ function createWindow() {
 }
 
 // ---- net helpers ----
-function httpGet(url) {
+function httpGet(url, headers) {
   return new Promise((resolve, reject) => {
-    (url.startsWith('https') ? https : http).get(url, (res) => {
-      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) { res.resume(); return resolve(httpGet(res.headers.location)); }
+    const opts = headers ? { headers } : undefined;
+    (url.startsWith('https') ? https : http).get(url, opts, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) { res.resume(); return resolve(httpGet(res.headers.location, headers)); }
       if (res.statusCode !== 200) { res.resume(); return reject(new Error('HTTP ' + res.statusCode)); }
       let data = ''; res.on('data', (c) => data += c); res.on('end', () => resolve(data));
     }).on('error', reject);
@@ -200,6 +205,73 @@ function launch(kind) {
   return true;
 }
 
+// ---- launcher self-update ----
+// The GAME (client/server jars) updates via ensureXMage/config.json above; this
+// section is a separate concern — keeping the launcher APP ITSELF current, via
+// GitHub Releases.
+function versionGt(a, b) {
+  const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const x = pa[i] || 0, y = pb[i] || 0;
+    if (x !== y) return x > y;
+  }
+  return false;
+}
+
+// macOS: no self-install (ad-hoc signing fails Squirrel.Mac's signature check) — just
+// tell the user a newer build exists and let them grab it from the release page.
+async function checkMacUpdate() {
+  try {
+    const url = 'https://api.github.com/repos/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/releases/latest';
+    const data = JSON.parse(await httpGet(url, { 'User-Agent': 'xmage-launcher' }));
+    const latest = String(data.tag_name || '').replace(/^v/, '');
+    if (latest && versionGt(latest, app.getVersion())) {
+      log('sys', 'Launcher update available: v' + latest);
+      send('launcher:update', { state: 'available-manual', version: latest, url: data.html_url });
+    }
+  } catch (e) {
+    log('sys', 'Launcher update check failed: ' + (e.message || e));
+  }
+}
+
+let updaterWired = false, usedFallbackFeed = false;
+function wireAutoUpdater() {
+  if (updaterWired) return; updaterWired = true;
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = false;
+  autoUpdater.on('update-available', (info) => {
+    log('sys', 'Launcher update available: v' + info.version + ' — downloading…');
+    send('launcher:update', { state: 'downloading', version: info.version });
+  });
+  autoUpdater.on('update-downloaded', (info) => {
+    log('ok2', 'Launcher update v' + info.version + ' ready — restart to install.');
+    send('launcher:update', { state: 'ready', version: info.version });
+  });
+  autoUpdater.on('error', (err) => {
+    log('sys', 'Launcher update check failed: ' + (err && err.message || err));
+  });
+}
+
+// Windows + Linux: real self-install via electron-updater, GitHub primary / own web
+// server as fallback if GitHub can't be reached.
+async function checkWinLinuxUpdate() {
+  wireAutoUpdater();
+  try {
+    await autoUpdater.checkForUpdates();
+  } catch (e) {
+    if (usedFallbackFeed) { log('sys', 'Launcher update check failed (fallback unreachable too): ' + (e.message || e)); return; }
+    usedFallbackFeed = true;
+    log('sys', 'GitHub unreachable for launcher updates — falling back to ' + UPDATE_FALLBACK_URL);
+    autoUpdater.setFeedURL({ provider: 'generic', url: UPDATE_FALLBACK_URL });
+    try { await autoUpdater.checkForUpdates(); } catch (e2) { log('sys', 'Launcher update check failed: ' + (e2.message || e2)); }
+  }
+}
+
+function checkLauncherUpdate() {
+  if (!app.isPackaged) { log('sys', 'Launcher update check skipped (dev mode).'); return; }
+  return PLAT === 'darwin' ? checkMacUpdate() : checkWinLinuxUpdate();
+}
+
 // ---- IPC ----
 ipcMain.handle('app:info', () => ({
   installRoot: INSTALL_ROOT, configUrl: CONFIG_URL, platform: PLAT,
@@ -214,6 +286,8 @@ ipcMain.handle('settings:set', (_e, s) => { saveSettings(s); return getSettings(
 ipcMain.handle('open:url', (_e, u) => shell.openExternal(u));
 ipcMain.handle('win:close', () => win.close());
 ipcMain.handle('win:min', () => win.minimize());
+ipcMain.handle('launcher:checkUpdate', () => checkLauncherUpdate());
+ipcMain.handle('launcher:installUpdate', () => { if (PLAT !== 'darwin') autoUpdater.quitAndInstall(); });
 
 app.whenReady().then(createWindow);
 app.on('window-all-closed', () => { Object.values(procs).forEach((p) => { try { p.kill(); } catch (_) {} }); if (process.platform !== 'darwin') app.quit(); });
