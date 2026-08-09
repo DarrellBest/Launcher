@@ -25,9 +25,25 @@ set -euo pipefail
 cd "$(dirname "$0")/.."                        # repo root
 WEBDIR=/var/www/html/files
 
+die(){ printf 'ERROR: %s\n' "$*" >&2; exit 1; }
+
 cd electron
+
+# Preflight: refuse to build from a dirty tree — uncommitted source edits
+# could end up baked into the installers without being part of the commit
+# the release tag points at. (git status --porcelain reports the whole repo
+# regardless of cwd, so this is equivalent to running it from repo root.)
+[ -z "$(git status --porcelain)" ] || { git status -s; die "working tree not clean — commit/stash first"; }
+
 VER=$(node -p "require('./package.json').version")
 TAG="v${VER}"
+
+# Preflight: refuse to re-run against a tag that already exists — otherwise
+# a failure partway through a retry (e.g. gh release create) would abort via
+# set -e *after* the mirror files were already overwritten, leaving things
+# inconsistent.
+git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null && die "tag ${TAG} already exists — bump the version or delete the tag before re-running"
+
 echo ">> building launcher ${TAG} (win nsis + linux AppImage)"
 npm install
 
@@ -45,15 +61,16 @@ npx electron-builder --win nsis --x64 --publish never
 npx electron-builder --linux AppImage --x64 --publish never
 
 echo ">> staging installers + update manifests to ${WEBDIR}"
-cp -f dist/XMageLauncher-*-Setup.exe dist/XMageLauncher-*.AppImage dist/latest.yml dist/latest-linux.yml "$WEBDIR/"
+cp -f "dist/XMageLauncher-${VER}-Setup.exe" "dist/XMageLauncher-${VER}-Setup.exe.blockmap" "dist/XMageLauncher-${VER}.AppImage" dist/latest.yml dist/latest-linux.yml "$WEBDIR/"
 
 cd ..
 echo ">> tagging and pushing ${TAG}"
 git tag "$TAG"
 git push origin "$TAG"
+git push origin HEAD
 
 echo ">> publishing GitHub release ${TAG}"
-ASSETS=(electron/dist/XMageLauncher-*-Setup.exe electron/dist/XMageLauncher-*.AppImage electron/dist/latest.yml electron/dist/latest-linux.yml)
+ASSETS=(electron/dist/XMageLauncher-${VER}-Setup.exe electron/dist/XMageLauncher-${VER}-Setup.exe.blockmap electron/dist/XMageLauncher-${VER}.AppImage electron/dist/latest.yml electron/dist/latest-linux.yml)
 gh release create "$TAG" "${ASSETS[@]}" \
   --title "Launcher ${TAG}" \
   --notes "Windows + Linux build of the XMage fork launcher. macOS build published separately by mac-build.yml on the same tag." \
