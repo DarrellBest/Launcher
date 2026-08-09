@@ -2,12 +2,13 @@ name: mac-build
 
 # Builds the universal (Intel + Apple Silicon) macOS dmg of the Electron launcher.
 # The dev boxes are Linux — electron-builder can only produce mac targets on macOS,
-# so this runs on a GitHub-hosted mac runner. Trigger by pushing a tag like
-# "mac-v1.2.1" (publishes a release with the dmg) or manually via workflow_dispatch.
+# so this runs on a GitHub-hosted mac runner. Triggered by the same "v<version>" tag
+# push that tools/release-launcher.sh uses for win/linux — this job just adds the mac
+# dmg to that same release. Can also run manually via workflow_dispatch.
 
 on:
   push:
-    tags: ['mac-v*']
+    tags: ['v*']
   workflow_dispatch: {}
 
 permissions:
