@@ -106,6 +106,21 @@ window.xmage.onProcState((p) => {
   refreshPlayButton();
 });
 
+// ---- launcher self-update (the launcher APP, not the game) ----
+window.xmage.onLauncherUpdate((p) => {
+  const pill = $('launcherUpdatePill'), badge = $('launcherUpdateBadge');
+  if (p.state === 'downloading') return; // logged to console already; nothing actionable yet
+  if (p.state === 'ready') {
+    pill.style.display = '';
+    badge.textContent = 'Restart to update';
+    badge.onclick = () => window.xmage.installLauncherUpdate();
+  } else if (p.state === 'available-manual') {
+    pill.style.display = '';
+    badge.textContent = 'v' + p.version + ' available';
+    badge.onclick = () => window.xmage.openUrl(p.url);
+  }
+});
+
 // ---- client settings modal ----
 async function openSettings() {
   const s = await window.xmage.getSettings();
@@ -140,6 +155,7 @@ async function boot() {
   $('foot-java').textContent = info.platform + ' · ' + (info.javaInstalled ? 'java ready' : 'java needed');
   READY = info.clientInstalled && info.javaInstalled;
   log('sys', 'Launcher ready. Install root: ' + info.installRoot);
+  window.xmage.checkLauncherUpdate(); // fire-and-forget; UI updates via onLauncherUpdate
   log('sys', 'Reading config from ' + info.configUrl);
   try {
     CFG = await window.xmage.getConfig();

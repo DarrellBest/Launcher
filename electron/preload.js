@@ -12,8 +12,11 @@ contextBridge.exposeInMainWorld('xmage', {
   openUrl: (u) => ipcRenderer.invoke('open:url', u),
   winClose: () => ipcRenderer.invoke('win:close'),
   winMin: () => ipcRenderer.invoke('win:min'),
+  checkLauncherUpdate: () => ipcRenderer.invoke('launcher:checkUpdate'),
+  installLauncherUpdate: () => ipcRenderer.invoke('launcher:installUpdate'),
   onConsole: (cb) => ipcRenderer.on('console:line', (_e, p) => cb(p)),
   onProgress: (cb) => ipcRenderer.on('progress', (_e, p) => cb(p)),
   onPhase: (cb) => ipcRenderer.on('phase', (_e, p) => cb(p)),
   onProcState: (cb) => ipcRenderer.on('proc:state', (_e, p) => cb(p)),
+  onLauncherUpdate: (cb) => ipcRenderer.on('launcher:update', (_e, p) => cb(p)),
 });
