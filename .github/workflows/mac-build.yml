@@ -63,6 +63,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" dist/XMageLauncher-*.dmg \
-            --title "Mac launcher $GITHUB_REF_NAME" \
-            --notes "Universal (Intel + Apple Silicon) macOS build of the XMage fork launcher." \
+            --title "Launcher $GITHUB_REF_NAME" \
+            --notes "Unified win/linux/mac build of the XMage fork launcher. This job publishes the universal (Intel + Apple Silicon) macOS dmg; the Windows and Linux installers are published separately by tools/release-launcher.sh on the same tag." \
           || gh release upload "$GITHUB_REF_NAME" dist/XMageLauncher-*.dmg --clobber
