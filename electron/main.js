@@ -287,7 +287,7 @@ ipcMain.handle('open:url', (_e, u) => shell.openExternal(u));
 ipcMain.handle('win:close', () => win.close());
 ipcMain.handle('win:min', () => win.minimize());
 ipcMain.handle('launcher:checkUpdate', () => checkLauncherUpdate());
-ipcMain.handle('launcher:installUpdate', () => { if (PLAT !== 'darwin') autoUpdater.quitAndInstall(); });
+ipcMain.handle('launcher:installUpdate', () => { if (PLAT !== 'darwin') autoUpdater.quitAndInstall(true, true); });
 
 app.whenReady().then(createWindow);
 app.on('window-all-closed', () => { Object.values(procs).forEach((p) => { try { p.kill(); } catch (_) {} }); if (process.platform !== 'darwin') app.quit(); });
