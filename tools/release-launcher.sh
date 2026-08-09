@@ -30,6 +30,17 @@ VER=$(node -p "require('./package.json').version")
 TAG="v${VER}"
 echo ">> building launcher ${TAG} (win nsis + linux AppImage)"
 npm install
+
+# npm install can rewrite package-lock.json's version fields (e.g. to match a
+# package.json bump that hasn't been reflected in the lockfile yet). Commit
+# that drift now so the tag/release always corresponds to a clean, consistent
+# working tree — see v1.2.2 release postmortem where this was missed.
+if ! git diff --quiet -- package-lock.json 2>/dev/null; then
+  echo ">> package-lock.json changed by npm install — committing drift"
+  git add package-lock.json
+  git commit -m "launcher: sync package-lock.json for ${TAG}"
+fi
+
 npx electron-builder --win nsis --x64 --publish never
 npx electron-builder --linux AppImage --x64 --publish never
 
