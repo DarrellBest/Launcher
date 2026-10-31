@@ -71,10 +71,10 @@ git push origin HEAD
 
 echo ">> publishing GitHub release ${TAG}"
 ASSETS=(electron/dist/XMageLauncher-${VER}-Setup.exe electron/dist/XMageLauncher-${VER}-Setup.exe.blockmap electron/dist/XMageLauncher-${VER}.AppImage electron/dist/latest.yml electron/dist/latest-linux.yml)
-gh release create "$TAG" "${ASSETS[@]}" \
+gh release create "$TAG" "${ASSETS[@]}" -R DarrellBest/Launcher \
   --title "Launcher ${TAG}" \
   --notes "Windows + Linux build of the XMage fork launcher. macOS build published separately by mac-build.yml on the same tag." \
-  || gh release upload "$TAG" "${ASSETS[@]}" --clobber
+  || gh release upload "$TAG" "${ASSETS[@]}" -R DarrellBest/Launcher --clobber
 
 echo ">> DONE — ${TAG} built, staged to ${WEBDIR}, and published to GitHub Releases."
 echo "   Mac dmg publishes separately via GitHub Actions (mac-build.yml) on the same tag — check:"
