@@ -5,7 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const http = require('http');
 const https = require('https');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const tar = require('tar');
 const extractZip = require('extract-zip');
 const { autoUpdater } = require('electron-updater');
@@ -25,6 +25,12 @@ const JAVA_SUFFIX = PLAT === 'win32' ? 'windows-x64' : PLAT === 'darwin' ? 'maco
 // These encoding flags are always on; server heap is fixed.
 const ENCODING_OPTS = ['-Dfile.encoding=UTF-8', '-Dsun.jnu.encoding=UTF-8'];
 const SERVER_OPTS = ['-Xmx1024m'];
+// The client's networking (JBoss Remoting + Java serialization) reflects into java.base.
+// On Java 9+ that is blocked unless these modules are opened, and the client then fails
+// to connect with "Wrong java version". Java 8 rejects --add-opens and won't start, so
+// they are only added when the chosen JVM is 9 or newer (see javaMajor).
+const ADD_OPENS_OPTS = ['java.io', 'java.lang', 'java.lang.reflect', 'java.util', 'java.util.concurrent',
+  'java.net', 'java.text', 'java.math', 'sun.nio.ch'].map((p) => '--add-opens=java.base/' + p + '=ALL-UNNAMED');
 
 let win;
 const procs = {};
@@ -112,12 +118,28 @@ function graphicsFlags(choice) {
     default:         return PLAT === 'linux' ? ['-Dsun.java2d.xrender=true'] : []; // auto: Java default (D3D on Windows) is crash-safe
   }
 }
-function buildClientOpts() {
+// Major version of the JVM in a Java home: 8 for "1.8.0_201", 17 for "17.0.2". Reads the
+// home's `release` file, falling back to `java -version`. 0 if it can't be determined.
+function javaMajor(home) {
+  const parse = (v) => { const m = /^(?:1\.)?(\d+)/.exec(v || ''); return m ? parseInt(m[1], 10) : 0; };
+  try {
+    const m = /^JAVA_VERSION="([^"]+)"/m.exec(fs.readFileSync(path.join(home, 'release'), 'utf8'));
+    if (m) return parse(m[1]);
+  } catch (_) {}
+  try {
+    const r = spawnSync(path.join(home, 'bin', PLAT === 'win32' ? 'java.exe' : 'java'), ['-version'], { encoding: 'utf8', timeout: 15000, windowsHide: true });
+    const m = /version "([^"]+)"/.exec((r.stderr || '') + (r.stdout || ''));
+    if (m) return parse(m[1]);
+  } catch (_) {}
+  return 0;
+}
+function buildClientOpts(home) {
   const s = getSettings();
   const mem = /^\d+$/.test(String(s.memory)) ? s.memory : SETTINGS_DEFAULTS.memory;
   const extra = String(s.extraArgs || '').trim() ? s.extraArgs.trim().split(/\s+/) : [];
+  const opens = javaMajor(home) >= 9 ? ADD_OPENS_OPTS.filter((o) => !extra.includes(o)) : [];
   return ['-Xmx' + mem + 'm', ...graphicsFlags(s.graphics), ...ENCODING_OPTS,
-    ...(s.ipv4 === 'true' ? ['-Djava.net.preferIPv4Stack=true'] : []), ...extra];
+    ...(s.ipv4 === 'true' ? ['-Djava.net.preferIPv4Stack=true'] : []), ...opens, ...extra];
 }
 // Resolve which JVM runs the client: bundled jre* or the machine's system Java.
 function findSystemJava() {
@@ -191,7 +213,7 @@ function launch(kind) {
   const dir = path.join(XMAGE_DIR, kind === 'client' ? 'mage-client' : 'mage-server');
   if (!home || !fs.existsSync(dir)) { log('err', kind + ': not installed yet — run Install first.'); return false; }
   const bin = path.join(home, 'bin', PLAT === 'win32' ? 'java.exe' : 'java');
-  const opts = kind === 'client' ? buildClientOpts() : SERVER_OPTS;
+  const opts = kind === 'client' ? buildClientOpts(home) : SERVER_OPTS;
   const main = kind === 'client' ? 'mage.client.MageFrame' : 'mage.server.Main';
   const args = [...opts, '-cp', path.join(dir, 'lib', '*'), main];
   if (kind === 'client') log('sys', 'Client JVM: ' + opts.join(' '));
