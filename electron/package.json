@@ -1,6 +1,6 @@
 {
   "name": "xmage-launcher",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "description": "Arcane Electron launcher for XMage (Darrell's Fork)",
   "main": "main.js",
   "scripts": {
@@ -47,7 +47,9 @@
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "include": "build/installer.nsh",
+      "perMachine": false
     },
     "mac": {
       "target": [

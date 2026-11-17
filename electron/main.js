@@ -240,8 +240,9 @@ function versionGt(a, b) {
   return false;
 }
 
-// macOS: no self-install (ad-hoc signing fails Squirrel.Mac's signature check) — just
-// tell the user a newer build exists and let them grab it from the release page.
+// macOS (and all-users Windows installs, see isWinPerMachineInstall): no self-install
+// (ad-hoc signing fails Squirrel.Mac's signature check) — just tell the user a newer
+// build exists and let them grab it from the release page.
 async function checkMacUpdate() {
   try {
     const url = 'https://api.github.com/repos/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/releases/latest';
@@ -289,9 +290,40 @@ async function checkWinLinuxUpdate() {
   }
 }
 
+// Windows: an older installer let people install "for all users" (Program Files). Silent
+// updates can't elevate, so on such an install they land in a second, per-user copy while
+// the shortcuts keep opening the old one -- the launcher "reverts" on every restart.
+function winProgramFilesDirs() {
+  return [process.env.ProgramFiles, process.env['ProgramFiles(x86)'], process.env.ProgramW6432]
+    .filter(Boolean).map((d) => path.resolve(d).toLowerCase() + path.sep);
+}
+function isWinPerMachineInstall() {
+  if (PLAT !== 'win32') return false;
+  const exe = path.resolve(process.execPath).toLowerCase();
+  return winProgramFilesDirs().some((d) => exe.startsWith(d));
+}
+function warnStaleWinPerMachineCopy() {
+  if (PLAT !== 'win32' || isWinPerMachineInstall()) return;
+  const exeName = path.basename(process.execPath);
+  for (const base of [process.env.ProgramFiles, process.env['ProgramFiles(x86)']].filter(Boolean)) {
+    const stale = path.join(base, 'XMage Launcher', exeName); // electron-builder's default per-machine dir (productName)
+    if (fs.existsSync(stale)) {
+      log('err', 'An old "all users" copy of the launcher is still installed at ' + path.dirname(stale) +
+        '. Your shortcuts may open that old copy. Uninstall it from Windows Settings > Apps.');
+    }
+  }
+}
+
 function checkLauncherUpdate() {
   if (!app.isPackaged) { log('sys', 'Launcher update check skipped (dev mode).'); return; }
-  return PLAT === 'darwin' ? checkMacUpdate() : checkWinLinuxUpdate();
+  warnStaleWinPerMachineCopy();
+  if (PLAT === 'darwin') return checkMacUpdate();
+  if (isWinPerMachineInstall()) {
+    log('sys', 'Launcher is installed for all users, so it can\'t update itself. ' +
+      'Reinstall it once from the release page (uninstall this copy first) and it will update automatically after that.');
+    return checkMacUpdate(); // same "new version available" link, no silent install
+  }
+  return checkWinLinuxUpdate();
 }
 
 // ---- IPC ----
