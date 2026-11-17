@@ -39,6 +39,7 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1180, height: 760, minWidth: 980, minHeight: 640,
     frame: false, backgroundColor: '#0a0712', show: false,
+    icon: path.join(__dirname, 'icon.png'), // window/taskbar icon on Linux (Windows/mac use the embedded one)
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false }
   });
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));

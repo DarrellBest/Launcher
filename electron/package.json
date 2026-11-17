@@ -1,6 +1,6 @@
 {
   "name": "xmage-launcher",
-  "version": "1.2.4",
+  "version": "1.2.5",
   "description": "Arcane Electron launcher for XMage (Darrell's Fork)",
   "main": "main.js",
   "scripts": {
@@ -26,7 +26,8 @@
     "files": [
       "main.js",
       "preload.js",
-      "renderer/**/*"
+      "renderer/**/*",
+      "icon.png"
     ],
     "directories": {
       "output": "dist"
@@ -36,14 +37,16 @@
         "AppImage"
       ],
       "category": "Game",
-      "artifactName": "XMageLauncher-${version}.${ext}"
+      "artifactName": "XMageLauncher-${version}.${ext}",
+      "icon": "build/icon.png"
     },
     "win": {
       "target": [
         "nsis"
       ],
-      "signAndEditExecutable": false,
-      "artifactName": "XMageLauncher-${version}-Setup.${ext}"
+      "signAndEditExecutable": true,
+      "artifactName": "XMageLauncher-${version}-Setup.${ext}",
+      "icon": "build/icon.png"
     },
     "nsis": {
       "oneClick": false,
@@ -56,7 +59,8 @@
         "dmg"
       ],
       "category": "public.app-category.games",
-      "artifactName": "XMageLauncher-${version}.${ext}"
+      "artifactName": "XMageLauncher-${version}.${ext}",
+      "icon": "build/icon.png"
     },
     "publish": {
       "provider": "github",
